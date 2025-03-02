@@ -57,7 +57,7 @@ PROMPT_TEMPLATE = """
 """
 
 # Function to get Gemini AI response
-def get_gemini_response(user_query, user_id):
+def get_gemini_response(user_query):
     """ Gemini AI से controlled response लेने के लिए function """
     try:
         model = genai.GenerativeModel("gemini-1.5-flash")  # Flash model use किया गया है
@@ -67,45 +67,60 @@ def get_gemini_response(user_query, user_id):
         print(f"Error: {e}")
         return "अभी तकनीकी समस्या है, कृपया बाद में प्रयास करें।"
 
-# Function to get user preferences
-def get_user_preferences(user_id):
-    return user_preferences.get(user_id, "GK")  # Default preference is 'GK'
-
-# Function to set user preferences
-def set_user_preferences(user_id, new_preference):
-    user_preferences[user_id] = new_preference
-
-# Function to get last question asked by user
-def get_last_question(user_id):
-    return user_last_question.get(user_id, None)
-
-# Function to set last question asked
-def set_last_question(user_id, question):
-    user_last_question[user_id] = question
+# Function to generate a new quiz question dynamically
+def generate_quiz_question():
+    """ Gemini AI से नया random GK, GS, या Current Affairs सवाल generate करने के लिए function """
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content("कृपया एक नया, रोचक और informative GK, GS, या Current Affairs का सवाल पूछें।")
+        return response.text.strip() if response.text else "भारत का राष्ट्रीय खेल क्या है?"
+    except Exception as e:
+        print(f"Error generating question: {e}")
+        return "भारत का राष्ट्रीय खेल क्या है?"  # Default fallback question
 
 @app.route('/webhook', methods=['POST'])
 def dialogflow_webhook():
     req_data = request.get_json()
     
     # Extract user query and user ID
-    user_query = req_data.get("queryResult", {}).get("queryText", "")
+    user_query = req_data.get("queryResult", {}).get("queryText", "").strip().lower()
     user_id = req_data.get("originalDetectIntentRequest", {}).get("payload", {}).get("user", {}).get("userId", "default_user")
     
-    # Get user preferences and last question for contextual continuity
-    last_question = get_last_question(user_id)
-    user_pref = get_user_preferences(user_id)
-    
-    # Call Gemini AI
-    response_text = get_gemini_response(user_query, user_id)
-    
-    # Quiz Interaction: ask if the bot can ask a question after the answer
-    response_text += "\nक्या मैं आपसे एक सवाल पूछ सकता हूँ?"
-    
-    # After a response, store the last question asked for continuity
-    set_last_question(user_id, user_query)
+    # Get last question asked
+    last_question = user_last_question.get(user_id, None)
 
-    # Return response
-    return jsonify({"fulfillmentText": response_text})
+    response_messages = []  # Store multiple responses
+
+    if last_question:
+        # Validate the answer using Gemini AI
+        validation_prompt = f"क्या यह उत्तर '{user_query}' इस सवाल का सही जवाब है: '{last_question}'? अगर हाँ, तो 'सही' लिखो, नहीं तो 'गलत' लिखो और सही उत्तर बताओ।"
+        validation_response = get_gemini_response(validation_prompt)
+
+        if "सही" in validation_response:
+            response_messages.append({"text": "सही जवाब! 🎉 अच्छा किया!"})
+        else:
+            correct_answer = validation_response.replace("गलत", "").strip()
+            response_messages.append({"text": f"गलत जवाब! सही उत्तर है: {correct_answer}।"})
+
+        # Generate and send a new quiz question separately
+        new_question = generate_quiz_question()
+        response_messages.append({"text": new_question})
+
+        # Store the new question
+        user_last_question[user_id] = new_question
+    else:
+        # Normal study-related query
+        response_text = get_gemini_response(user_query)
+        response_messages.append({"text": response_text})
+
+        # Ask if the user wants a quiz question separately
+        response_messages.append({"text": "क्या मैं आपसे एक सवाल पूछ सकता हूँ?"})
+
+        # Store a new dynamic quiz question for continuity
+        user_last_question[user_id] = generate_quiz_question()
+
+    # Return multiple responses
+    return jsonify({"fulfillmentMessages": [{"text": msg} for msg in response_messages]})
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=8000)
