@@ -17,6 +17,11 @@ app = Flask(__name__)
 user_preferences = {}
 user_last_question = {}
 
+# Root route for checking if the server is running
+@app.route('/')
+def home():
+    return "It's working!"
+
 # Custom prompt for Gemini AI
 PROMPT_TEMPLATE = """
 तुम एक पढ़ाई में मदद करने वाले सहायक हो। तुम्हारा काम सिर्फ study-related सवालों के जवाब देना है।
