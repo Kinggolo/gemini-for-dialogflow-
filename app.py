@@ -60,7 +60,7 @@ PROMPT_TEMPLATE = """
 def get_gemini_response(user_query, user_id):
     """ Gemini AI से controlled response लेने के लिए function """
     try:
-        model = genai.GenerativeModel("gemini-pro")
+        model = genai.GenerativeModel("gemini-1.5-flash")  # Flash model use किया गया है
         response = model.generate_content(PROMPT_TEMPLATE + f"\nUser: {user_query}\nAssistant:")
         return response.text if response.text else "मुझे समझ नहीं आया, कृपया फिर से पूछें।"
     except Exception as e:
