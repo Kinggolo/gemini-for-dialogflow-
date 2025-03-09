@@ -23,7 +23,18 @@ def home():
 def health_check():
     return jsonify({"status": "ok", "message": "Server is running fine"}), 200
 
-# Telegram-friendly response template with MarkdownV2 formatting
+# **📢 Welcome Message for New Users (TELEGRAM_WELCOME Trigger)**
+TELEGRAM_WELCOME_MESSAGE = """
+*Welcome to the AtMini Bot Community\\!* 🎉  
+
+We're excited to have you join us\\! AtMini Bot is here to make your academic life easier with smart guidance, helpful resources, and automation features\\.  
+
+This channel [@AtMiniOfficial](https://t.me/AtMiniOfficial) will keep you updated on the latest features, tips, and tricks to get the most out of AtMini Bot\\.  
+
+Feel free to explore, ask questions, and share your feedback\\! We're here to help you succeed\\. Let's learn and grow together\\! ✨
+"""
+
+# **📌 Telegram-Friendly Response Template**
 PROMPT_TEMPLATE = """
 *AtMini Bot* \\- आपका पर्सनल AI असिस्टेंट, जो आपकी academic और daily life को आसान बनाने के लिए बना है।  
 तुम्हारा मकसद सिर्फ पढ़ाई में मदद करना ही नहीं, बल्कि students को smart तरीके से guide करना और automation features से उनकी जिंदगी को आसान बनाना भी है।  
@@ -47,7 +58,7 @@ PROMPT_TEMPLATE = """
 _मैं आपके साथ काम करने और आपकी academic और daily life में सफल होने में मदद करने के लिए उत्सुक हूँ!_  
 """
 
-# Language detection function
+# **📌 Function to Detect User Language**
 def detect_language(user_query):
     if all(ord(char) < 128 for char in user_query):  # English characters only
         return "English"
@@ -56,7 +67,7 @@ def detect_language(user_query):
     else:
         return "Hinglish"
 
-# Function to get Gemini AI response
+# **📌 Function to Get Response from Gemini AI**
 def get_gemini_response(user_query):
     try:
         language = detect_language(user_query)
@@ -77,20 +88,26 @@ def get_gemini_response(user_query):
         print(f"Error: {e}")
         return "अभी तकनीकी समस्या है, कृपया बाद में प्रयास करें।"
 
-# Webhook route for Dialogflow
+# **📌 Webhook Route for Dialogflow**
 @app.route('/webhook', methods=['POST'])
 def dialogflow_webhook():
     req_data = request.get_json()
-    
-    # Extract user query
-    user_query = req_data.get("queryResult", {}).get("queryText", "")
-    
-    # Call Gemini AI
-    response_text = get_gemini_response(user_query)
 
-    # Return response with proper formatting
+    # **👉 Extract Intent Name**
+    intent_name = req_data.get("queryResult", {}).get("intent", {}).get("displayName", "")
+
+    # **👉 Extract User Query**
+    user_query = req_data.get("queryResult", {}).get("queryText", "")
+
+    # **🟢 Handle TELEGRAM_WELCOME Intent**
+    if intent_name == "TELEGRAM_WELCOME":
+        response_text = TELEGRAM_WELCOME_MESSAGE
+    else:
+        response_text = get_gemini_response(user_query)
+
+    # **👉 Return Response to Dialogflow**
     return jsonify({"fulfillmentText": response_text})
 
-# Run Flask App
+# **🚀 Run Flask App**
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=8000)
