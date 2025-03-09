@@ -1,19 +1,14 @@
 import os
 import google.generativeai as genai
 from flask import Flask, request, jsonify
-import telegram
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 # Initialize Gemini AI
 genai.configure(api_key=GEMINI_API_KEY)
-
-# Initialize Telegram Bot
-bot = telegram.Bot(token=TELEGRAM_BOT_TOKEN)
 
 # Flask app setup
 app = Flask(__name__)
@@ -28,69 +23,61 @@ def home():
 def health_check():
     return jsonify({"status": "ok", "message": "Server is running fine"}), 200
 
-# New Prompt for AtMini Bot (Supports Hindi, English, and Hinglish)
+# Telegram-friendly response template with MarkdownV2 formatting
 PROMPT_TEMPLATE = """
-You are AtMini Bot, a highly professional and intelligent AI assistant designed to help students in their academic and daily life. 
-Your goal is not just to assist in studies but also to guide students smartly and simplify their lives through automation.
+*AtMini Bot* \\- आपका पर्सनल AI असिस्टेंट, जो आपकी academic और daily life को आसान बनाने के लिए बना है।  
+तुम्हारा मकसद सिर्फ पढ़ाई में मदद करना ही नहीं, बल्कि students को smart तरीके से guide करना और automation features से उनकी जिंदगी को आसान बनाना भी है।  
 
-तुम AtMini Bot हो, एक highly professional और intelligent AI assistant, जो students की academic और daily life को आसान बनाने के लिए बनाया गया है।
-तुम्हारा मकसद सिर्फ पढ़ाई में मदद करना ही नहीं, बल्कि students को smart तरीके से guide करना और automation features से उनकी जिंदगी को आसान बनाना भी है।
+➤ *मैं आपकी कैसे मदद कर सकता हूँ?*  
 
-🔹 **Language Preference:**  
-- Reply in the same language as the user’s query (English, Hindi, or Hinglish).  
-- If the user mixes languages, respond naturally in a mixed tone.  
+📚 *पढ़ाई में मदद:*  
+मैं आपके सवालों के जवाब दे सकता हूँ, मुश्किल concepts को समझा सकता हूँ, और आपको relevant resources ढूंढने में मदद कर सकता हूँ।  
 
-📌 **Introduction for New Users:**  
-When a new student interacts for the first time, give a professional introduction explaining how AtMini Bot can help in studies and daily life.  
+🎯 *स्मार्ट गाइडेंस:*  
+मैं आपको study plans बनाने, time management skills विकसित करने, और परीक्षा की तैयारी करने में मदद कर सकता हूँ।  
 
-🔄 **System Updates:**  
-The system is constantly evolving, and new automation and advanced features are being added to improve the student experience.
+🤖 *ऑटोमेशन:*  
+मैं आपकी daily life के कई कामों को automate कर सकता हूँ, जैसे reminders सेट करना, नोट्स लेना, और जानकारी ढूंढना।  
 
-📢 **Official Channel:**  
-If a student is using this bot but hasn't joined our official channel, send this message:  
-"अपनी learning experience को और बेहतर बनाने के लिए हमारे official channel से जुड़ें: @AtMiniOfficial"
+हमारा सिस्टम लगातार बेहतर हो रहा है, और हम जल्द ही आपके लिए और भी ज्यादा automation और सुविधाएं जोड़ेंगे।  
+
+📢 *अगर आप अभी तक हमारे official channel से नहीं जुड़े हैं, तो अपनी learning experience को और बेहतर बनाने के लिए हमारे official channel से जुड़ें:*  
+👉 [@AtMiniOfficial](https://t.me/AtMiniOfficial)  
+
+_मैं आपके साथ काम करने और आपकी academic और daily life में सफल होने में मदद करने के लिए उत्सुक हूँ!_  
 """
+
+# Language detection function
+def detect_language(user_query):
+    if all(ord(char) < 128 for char in user_query):  # English characters only
+        return "English"
+    elif any("\u0900" <= char <= "\u097F" for char in user_query):  # Hindi characters detected
+        return "Hindi"
+    else:
+        return "Hinglish"
 
 # Function to get Gemini AI response
 def get_gemini_response(user_query):
     try:
-        model = genai.GenerativeModel("gemini-2.0-flash")
-        response = model.generate_content(PROMPT_TEMPLATE + f"\nUser: {user_query}\nAssistant:")
-        
-        if response.text:
-            return response.text
+        language = detect_language(user_query)
+
+        if language == "English":
+            prompt = "*Hello! I am AtMini Bot, your personal AI assistant\\.*\n\n" + PROMPT_TEMPLATE
+        elif language == "Hindi":
+            prompt = "*नमस्कार! मैं AtMini Bot, आपका पर्सनल AI असिस्टेंट हूँ\\.*\n\n" + PROMPT_TEMPLATE
         else:
-            return "मुझे समझ नहीं आया, कृपया फिर से पूछें। / I couldn't understand, please ask again."
-    
+            prompt = "*Hey! I'm AtMini Bot, your smart study assistant\\!* \n\n" + PROMPT_TEMPLATE
+
+        model = genai.GenerativeModel("gemini-2.0-flash")
+        response = model.generate_content(prompt + f"\nUser: {user_query}\nAssistant:")
+
+        return response.text if response.text else "मुझे समझ नहीं आया, कृपया फिर से पूछें।"
+
     except Exception as e:
         print(f"Error: {e}")
-        return "अभी तकनीकी समस्या है, कृपया बाद में प्रयास करें। / There is a technical issue, please try again later."
+        return "अभी तकनीकी समस्या है, कृपया बाद में प्रयास करें।"
 
-# Telegram message sender
-def send_telegram_message(chat_id, text):
-    try:
-        bot.send_message(chat_id=chat_id, text=text, parse_mode="Markdown")
-    except Exception as e:
-        print(f"Telegram Error: {e}")
-
-# Webhook for Telegram Bot
-@app.route('/telegram_webhook', methods=['POST'])
-def telegram_webhook():
-    data = request.get_json()
-    
-    if "message" in data:
-        chat_id = data["message"]["chat"]["id"]
-        user_query = data["message"]["text"]
-        
-        # Get AI response
-        response_text = get_gemini_response(user_query)
-        
-        # Send response to Telegram
-        send_telegram_message(chat_id, response_text)
-
-    return jsonify({"status": "ok"}), 200
-
-# Webhook for Dialogflow
+# Webhook route for Dialogflow
 @app.route('/webhook', methods=['POST'])
 def dialogflow_webhook():
     req_data = request.get_json()
@@ -101,8 +88,9 @@ def dialogflow_webhook():
     # Call Gemini AI
     response_text = get_gemini_response(user_query)
 
-    # Return response
+    # Return response with proper formatting
     return jsonify({"fulfillmentText": response_text})
 
+# Run Flask App
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=8000)
